@@ -7,6 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
+
 int page_allocator_type = 0;   // CS 3320 project 2
 
 struct {
@@ -19,6 +20,7 @@ static struct proc *initproc;
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
+extern int page_allocator_type;  // 0 = DEFAULT, 1 = LAZY
 
 static void wakeup1(void *chan);
 
@@ -27,6 +29,43 @@ pinit(void)
 {
   initlock(&ptable.lock, "ptable");
 }
+
+// Return the current CPU structure.
+
+// Return the current CPU structure (single-CPU kernel version).
+struct cpu*
+mycpu(void)
+{
+  // Only one CPU: always index 0
+  return &cpus[0];
+}
+
+// Return current CPU id (single-CPU, always 0).
+int
+cpuid(void)
+{
+  return 0;
+}
+
+
+// Return the currently running process on this CPU.
+struct proc*
+myproc(void)
+{
+  struct cpu *c;
+  struct proc *p;
+
+  pushcli();        // disable interrupts
+  c = mycpu();
+  p = c->proc;
+  popcli();         // re-enable interrupts
+
+  return p;
+}
+
+
+
+
 
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
@@ -106,32 +145,39 @@ userinit(void)
 
 // Grow current process's memory by n bytes.
 // Return 0 on success, -1 on failure.
+
+// Create a new process copying p as the parent.
+// Sets up stack to return as if from system call.
 int
 growproc(int n)
 {
   uint sz;
-  
+
   sz = proc->sz;
   if(n > 0){
-    if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
-    {
-      cprintf("Allocating pages failed!\n"); // CS3320: project 2
-      return -1;
+    if(page_allocator_type == 0){
+      // DEFAULT allocator: allocate physical pages immediately
+      if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
+        return -1;
+    } else {
+      // LAZY allocator: only grow the virtual size, no physical pages yet
+      if(sz + n >= KERNBASE)
+        return -1;
+      sz += n;
     }
   } else if(n < 0){
+    // shrinking is always eager: free pages immediately
     if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
-    {
-      cprintf("Deallocating pages failed!\n"); // CS3320: project 2
       return -1;
-    }
   }
+
   proc->sz = sz;
   switchuvm(proc);
   return 0;
 }
 
-// Create a new process copying p as the parent.
-// Sets up stack to return as if from system call.
+
+
 // Caller must set state of returned proc to RUNNABLE.
 int
 fork(void)
@@ -479,3 +525,6 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+
+

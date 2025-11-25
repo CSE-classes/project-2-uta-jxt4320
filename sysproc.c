@@ -8,6 +8,11 @@
 #include "proc.h"
 
 extern int free_frame_cnt; // CS3320 for project3
+extern int page_allocator_type;  // 0 = DEFAULT, 1 = LAZY
+extern struct spinlock tickslock;
+extern uint ticks;
+
+
 int
 sys_fork(void)
 {
@@ -46,15 +51,16 @@ sys_getpid(void)
 int
 sys_sbrk(void)
 {
-  int addr;
   int n;
-
   if(argint(0, &n) < 0)
     return -1;
-  addr = proc->sz;
+
+  int oldsz = proc->sz;
+
   if(growproc(n) < 0)
     return -1;
-  return addr;
+
+  return oldsz;
 }
 
 int
@@ -100,19 +106,22 @@ int sys_print_free_frame_cnt(void)
 
 // CS 3320 set page allocator
 extern int page_allocator_type;
-int sys_set_page_allocator(void)
+
+int
+sys_set_page_allocator(void)
 {
-    if(argint(0,&page_allocator_type) < 0){
-        return -1;
-    }
-    // please remove the following 
-    // when you start implementing your page allocator
-    if (page_allocator_type == 1)
-    {
-        cprintf("Your lazy allocator has not been implemented!\n");
-	return -1;
-    }
-    return 0;
+  int a;
+
+  // get the argument from user space
+  if(argint(0, &a) < 0)
+    return -1;
+
+  // we only support 0 (DEFAULT) and 1 (LAZY)
+  if(a != 0 && a != 1)
+    return -1;
+
+  page_allocator_type = a;
+  return 0;
 }
 
 // CS 3320 shared memory

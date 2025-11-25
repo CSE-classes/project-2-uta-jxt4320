@@ -1,19 +1,35 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
+use strict;
+use warnings;
 
-open(SIG, $ARGV[0]) || die "open $ARGV[0]: $!";
+# Take bootblock filename as argument
+my $file = shift or die "usage: sign.pl bootblock\n";
 
-$n = sysread(SIG, $buf, 1000);
+open(my $in, "<", $file) or die "cannot open $file: $!";
+binmode($in);
 
-if($n > 510){
-  print STDERR "boot block too large: $n bytes (max 510)\n";
-  exit 1;
+my $buf = "";
+my $n = read($in, $buf, 1000);
+defined $n or die "read error on $file\n";
+$n > 0 or die "empty $file\n";
+
+my @b = unpack("C*", $buf);
+
+# boot block must be at most 510 bytes before signature
+if (@b > 510) {
+    die "bootblock too large: " . scalar(@b) . " bytes (max 510)\n";
 }
 
-print STDERR "boot block is $n bytes (max 510)\n";
+# pad with zeros up to 510 bytes
+push @b, (0) x (510 - @b);
 
-$buf .= "\0" x (510-$n);
-$buf .= "\x55\xAA";
+# add 0x55AA signature
+$b[510] = 0x55;
+$b[511] = 0xAA;
 
-open(SIG, ">$ARGV[0]") || die "open >$ARGV[0]: $!";
-print SIG $buf;
-close SIG;
+$buf = pack("C*", @b);
+
+open(my $out, ">", $file) or die "cannot write $file: $!";
+binmode($out);
+print $out $buf;
+close($out);
